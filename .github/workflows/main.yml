@@ -29,23 +29,25 @@ jobs:
     steps:
       - name: 🎯 KHỞI ĐỘNG HỆ THỐNG
         run: |
+          Write-Host ""
           Write-Host "🤖 AI STV PREMIUM RDP SERVER" -ForegroundColor Yellow
           Write-Host "⚡ Powered by AI STV" -ForegroundColor Green
           Write-Host "🕒 Thời gian: ${{ github.event.inputs.duration }}" -ForegroundColor Magenta
+          $frames = @('⣾','⣽','⣻','⢿','⡿','⣟','⣯','⣷')
+          for($i=0;$i -lt 10;$i++){
+            Write-Host "`r🚀 Đang khởi tạo hệ thống... $($frames[$i % 8])" -NoNewline -ForegroundColor Blue
+            Start-Sleep -Milliseconds 100
+          }
+          Write-Host "`r✅ Hệ thống đã sẵn sàng!" -ForegroundColor Green
 
       - name: 🔧 CẤU HÌNH HỆ THỐNG
         run: |
           Write-Host "🛠️ ĐANG CẤU HÌNH HỆ THỐNG" -ForegroundColor Yellow
-          # Bật Remote Desktop
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
-          # Tắt xác thực mạng
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
-          # Cấu hình bảo mật RDP
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force
-          # Mở port 3389
           netsh advfirewall firewall add rule name="RDP-Premium" dir=in action=allow protocol=TCP localport=3389 profile=any
           netsh advfirewall firewall add rule name="RDP-Premium-Out" dir=out action=allow protocol=TCP localport=3389 profile=any
-          # Khởi động dịch vụ
           Set-Service -Name TermService -StartupType Automatic -ErrorAction SilentlyContinue
           Set-Service -Name UmRdpService -StartupType Automatic -ErrorAction SilentlyContinue
           Start-Service -Name TermService -ErrorAction SilentlyContinue
@@ -54,8 +56,8 @@ jobs:
       - name: 👤 TẠO TÀI KHOẢN PREMIUM
         run: |
           Write-Host "👤 ĐANG TẠO TÀI KHOẢN PREMIUM" -ForegroundColor Yellow
-          $matKhau = "AnhKhoa@123"
-          $securePass = ConvertTo-SecureString $matKhau -AsPlainText -Force
+          $matKhau="AnhKhoa@123"
+          $securePass=ConvertTo-SecureString $matKhau -AsPlainText -Force
           try { Remove-LocalUser -Name "AISTV-PREMIUM" -ErrorAction SilentlyContinue } catch {}
           New-LocalUser -Name "AISTV-PREMIUM" -Password $securePass -AccountNeverExpires -Description "AI STV Premium Account"
           Set-LocalUser -Name "AISTV-PREMIUM" -PasswordNeverExpires $true -ErrorAction SilentlyContinue
@@ -63,16 +65,25 @@ jobs:
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "AISTV-PREMIUM" -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Users" -Member "AISTV-PREMIUM" -ErrorAction SilentlyContinue
           Enable-LocalUser -Name "AISTV-PREMIUM"
-          echo "RDP_USER=AISTV-PREMIUM" >> $env:GITHUB_ENV
-          echo "RDP_PASS=$matKhau" >> $env:GITHUB_ENV
-          Write-Host "✅ Tài khoản: AISTV-PREMIUM đã sẵn sàng" -ForegroundColor Green
 
-      - name: 🗜️ CÀI WINRAR VÀ TẢI FILE
+      - name: 🖥️ HIỂN THỊ THÔNG TIN KẾT NỐI
         run: |
-          Write-Host "🔄 Cài đặt WinRAR nếu chưa có..." -ForegroundColor Yellow
-          $winrarPath = "$env:ProgramFiles\WinRAR\WinRAR.exe"
+          $matKhau="AnhKhoa@123"
+          $tailIP="Đang lấy..."
+          Write-Host ""
+          Write-Host "┌───────────────────────────────┐" -ForegroundColor Cyan
+          Write-Host "│ 🌐 IP: ________________" -ForegroundColor White
+          Write-Host "│ 👤 User: ________________" -ForegroundColor White
+          Write-Host "│ 🔐 Pass: ________________" -ForegroundColor White
+          Write-Host "└───────────────────────────────┘" -ForegroundColor Cyan
+          Write-Host "│ ℹ️ Lưu ý: Sau khi kết nối RDP, sử dụng User/Pass ở trên" -ForegroundColor Yellow
+
+      - name: 🗜️ CÀI WINRAR
+        run: |
+          Write-Host "🔄 Cài WinRAR nếu chưa có..." -ForegroundColor Yellow
+          $winrarPath="$env:ProgramFiles\WinRAR\WinRAR.exe"
           if (-Not (Test-Path $winrarPath)) {
-            $installer = "$env:TEMP\winrar-x64.exe"
+            $installer="$env:TEMP\winrar-x64.exe"
             try {
               Invoke-WebRequest -Uri "https://www.win-rar.com/fileadmin/winrar-versions/winrar/winrar-x64-713.exe" -OutFile $installer
               Start-Process -FilePath $installer -ArgumentList "/S" -Wait
@@ -86,32 +97,13 @@ jobs:
             Write-Host "✅ WinRAR đã có sẵn" -ForegroundColor Green
           }
 
-          try {
-            Write-Host "🔧 Set WinRAR làm app mặc định cho .rar..." -ForegroundColor Cyan
-            Start-Process -FilePath "$winrarPath" -ArgumentList "/reg" -Wait
-            Write-Host "✅ WinRAR đã được set làm mặc định" -ForegroundColor Green
-          } catch {
-            Write-Host "⚠️ Không thể set WinRAR làm mặc định, bỏ qua" -ForegroundColor Yellow
-          }
-
-          try {
-            $downloads = [Environment]::GetFolderPath("UserProfile") + "\Downloads"
-            $fileUrl = "https://drive.usercontent.google.com/download?id=1XKZzk-0fyGLyeuDDoUHL54AiK-ryUZmV&export=download&authuser=0"
-            $output = "$downloads\downloaded_file"
-            Invoke-WebRequest -Uri $fileUrl -OutFile $output -ErrorAction Stop
-            Write-Host "✅ File đã được tải về: $output" -ForegroundColor Green
-          } catch {
-            Write-Host "⚠️ Không thể tải file từ Google Drive, bỏ qua" -ForegroundColor Yellow
-          }
-
       - name: ⏳ DUY TRÌ PHIÊN LÀM VIỆC
         run: |
           Write-Host "🔄 BẮT ĐẦU DUY TRÌ PHIÊN LÀM VIỆC..." -ForegroundColor Yellow
-          # Giữ kết nối RDP, kiểm tra dịch vụ TermService
-          $lastLogTime = Get-Date
-          while ($true) {
-            $termService = Get-Service -Name TermService -ErrorAction SilentlyContinue
-            if ($termService.Status -ne 'Running') { Start-Service -Name TermService -ErrorAction SilentlyContinue }
+          $lastLogTime=Get-Date
+          while($true){
+            $termService=Get-Service -Name TermService -ErrorAction SilentlyContinue
+            if($termService.Status -ne 'Running'){Start-Service -Name TermService -ErrorAction SilentlyContinue}
             Start-Sleep -Seconds 30
           }
 
@@ -121,7 +113,6 @@ jobs:
           Write-Host "🧹 ĐANG DỌN DẸP HỆ THỐNG..." -ForegroundColor Yellow
           Remove-Item "$env:TEMP\rdp_password.txt" -ErrorAction SilentlyContinue
           Disable-LocalUser -Name "AISTV-PREMIUM" -ErrorAction SilentlyContinue
-          try { & "$env:ProgramFiles\Tailscale\tailscale.exe" down --accept-risk=all } catch {}
           netsh advfirewall firewall delete rule name="RDP-Premium" dir=in -ErrorAction SilentlyContinue
           netsh advfirewall firewall delete rule name="RDP-Premium-Out" dir=out -ErrorAction SilentlyContinue
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 1 -Force
