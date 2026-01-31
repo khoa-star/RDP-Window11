@@ -6,57 +6,62 @@ on:
       duration:
         description: '🕐 Thời gian sử dụng'
         required: false
-        default: '5h40m'
+        default: '12h'
         type: choice
         options:
-        - '1h'
-        - '3h'
-        - '5h40m'
+          - '1h'
+          - '3h'
+          - '6h'
+          - '12h'
 
 jobs:
   Premium-RDP-Setup:
     runs-on: windows-2022
-    timeout-minutes: 340
+    timeout-minutes: 720
 
     steps:
       - name: 🎯 KHỞI ĐỘNG HỆ THỐNG
         run: |
-          Write-Host ""
           Write-Host ""
           Write-Host "🤖 AI STV PREMIUM RDP SERVER" -ForegroundColor Yellow
           Write-Host "⚡ Powered by AI STV" -ForegroundColor Green
           Write-Host "🕒 Thời gian: ${{ github.event.inputs.duration }}" -ForegroundColor Magenta
           Write-Host ""
 
-          $frames = @('⣾','⣽','⣻','⢿','⡿','⣟','⣯','⣷')
-          for($i=0; $i -lt 10; $i++){
-            Write-Host "`r🚀 Đang khởi tạo hệ thống... $($frames[$i % 8])" -NoNewline -ForegroundColor Blue
-            Start-Sleep -Milliseconds 100
-          }
-          Write-Host "`r✅ Hệ thống đã sẵn sàng!                    " -ForegroundColor Green
-
-      - name: 🔧 CẤU HÌNH HỆ THỐNG
+      - name: 🛑 TẮT WINDOWS SECURITY (ANTI VIRUS + FIREWALL)
         run: |
-          Write-Host ""
-          Write-Host "🛠️  ĐANG CẤU HÌNH HỆ THỐNG" -ForegroundColor Yellow
+          Write-Host "🛑 Đang tắt Windows Defender & Firewall" -ForegroundColor Yellow
 
-          $steps = @(
-            { Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force },
-            { Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force },
-            { Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force },
-            { netsh advfirewall firewall add rule name="RDP-Premium-In" dir=in action=allow protocol=TCP localport=3389 profile=any },
-            { netsh advfirewall firewall add rule name="RDP-Premium-Out" dir=out action=allow protocol=TCP localport=3389 profile=any },
-            { Set-Service -Name TermService -StartupType Automatic -ErrorAction SilentlyContinue },
-            { Set-Service -Name UmRdpService -StartupType Automatic -ErrorAction SilentlyContinue },
-            { Start-Service -Name TermService -ErrorAction SilentlyContinue },
-            { Start-Service -Name UmRdpService -ErrorAction SilentlyContinue }
-          )
+          # Tắt Tamper Protection (registry)
+          reg add "HKLM\SOFTWARE\Microsoft\Windows Defender\Features" /v TamperProtection /t REG_DWORD /d 0 /f
 
-          foreach($s in $steps){
-            try { & $s } catch {}
-          }
+          # Tắt realtime / behavior / cloud
+          Set-MpPreference -DisableRealtimeMonitoring $true
+          Set-MpPreference -DisableBehaviorMonitoring $true
+          Set-MpPreference -DisableBlockAtFirstSeen $true
+          Set-MpPreference -DisableIOAVProtection $true
+          Set-MpPreference -DisableScriptScanning $true
 
-          Write-Host "🎯 Cấu hình hoàn tất!" -ForegroundColor Green
+          # Tắt SmartScreen
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" /v SmartScreenEnabled /t REG_SZ /d Off /f
+          reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\System" /v EnableSmartScreen /t REG_DWORD /d 0 /f
+
+          # Tắt App & Browser Control
+          reg add "HKLM\SOFTWARE\Microsoft\Windows Defender\SmartScreen" /v ConfigureAppInstallControlEnabled /t REG_DWORD /d 0 /f
+
+          # Tắt Firewall
+          netsh advfirewall set allprofiles state off
+
+          Write-Host "✅ Đã tắt toàn bộ Windows Security" -ForegroundColor Green
+
+      - name: 🔧 CẤU HÌNH RDP
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          netsh advfirewall firewall add rule name="RDP-Premium-In" dir=in action=allow protocol=TCP localport=3389
+          netsh advfirewall firewall add rule name="RDP-Premium-Out" dir=out action=allow protocol=TCP localport=3389
+          Set-Service -Name TermService -StartupType Automatic
+          Start-Service -Name TermService
 
       - name: 👤 TẠO TÀI KHOẢN PREMIUM
         run: |
@@ -64,27 +69,26 @@ jobs:
           Write-Host "👤 ĐANG TẠO TÀI KHOẢN PREMIUM" -ForegroundColor Yellow
 
           $Username = "Premium"
-          $Password = "AnhKhoa"
+          $Password = "AnhKhoa@123"
 
           $user = Get-LocalUser -Name $Username -ErrorAction SilentlyContinue
           if (-not $user) {
-            net user $Username $Password /add
-            net localgroup administrators $Username /add
+            net user $Username $Password /add /y
           } else {
             net user $Username $Password
           }
 
+          net localgroup administrators $Username /add | Out-Null
           net localgroup "Remote Desktop Users" $Username /add | Out-Null
 
           Write-Host ""
-          Write-Host "🔐 THÔNG TIN RDP" -ForegroundColor Magenta
-          Write-Host "👤 User: $Username" -ForegroundColor White
-          Write-Host "🔑 Pass: $Password" -ForegroundColor White
-          Write-Host "🖥️  Port: 3389" -ForegroundColor White
+          Write-Host "🔐 THÔNG TIN RDP"
+          Write-Host "👤 User: $Username"
+          Write-Host "🔑 Pass: $Password"
+          Write-Host "🖥️  Port: 3389"
 
       - name: 🧹 TỐI ƯU CUỐI
         run: |
           powercfg -change -standby-timeout-ac 0
           powercfg -change -monitor-timeout-ac 0
           powercfg -change -hibernate-timeout-ac 0
-          Write-Host "⚡ Đã tối ưu xong" -ForegroundColor Green
