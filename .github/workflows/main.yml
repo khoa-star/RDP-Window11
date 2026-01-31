@@ -3,15 +3,6 @@ name: 🚀 SEVER AI STV PREMIUM
 on:
   workflow_dispatch:
     inputs:
-      windows_version:
-        description: 'Chọn phiên bản Windows'
-        required: false
-        default: '2022'
-        type: choice
-        options:
-          - '2019'
-          - '2022'
-          - 'latest'
       duration:
         description: '🕐 Thời gian sử dụng'
         required: false
@@ -21,117 +12,117 @@ on:
           - '1h'
           - '3h'
           - '5h40m'
+      server_version:
+        description: 'Chọn phiên bản Windows Server'
+        required: false
+        default: '2022'
+        type: choice
+        options:
+          - '2019'
+          - '2022'
+          - 'latest'
 
 jobs:
   Premium-RDP-Setup:
-    runs-on: ${{ github.event.inputs.windows_version == '2019' && 'windows-2019' || github.event.inputs.windows_version == '2022' && 'windows-2022' || 'windows-latest' }}
+    runs-on: windows-2022
     timeout-minutes: 340
     steps:
-      # 1️⃣ BANNER CHÀO MỪNG
       - name: 🎯 KHỞI ĐỘNG HỆ THỐNG
         run: |
-          Write-Host "`n🤖 AI STV PREMIUM RDP SERVER" -ForegroundColor Yellow
+          Write-Host "🤖 AI STV PREMIUM RDP SERVER" -ForegroundColor Yellow
           Write-Host "⚡ Powered by AI STV" -ForegroundColor Green
           Write-Host "🕒 Thời gian: ${{ github.event.inputs.duration }}" -ForegroundColor Magenta
 
-      # 2️⃣ CẤU HÌNH HỆ THỐNG
       - name: 🔧 CẤU HÌNH HỆ THỐNG
         run: |
           Write-Host "🛠️ ĐANG CẤU HÌNH HỆ THỐNG" -ForegroundColor Yellow
-          # Bật Remote Desktop & tắt xác thực mạng
+          # Bật Remote Desktop
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          # Tắt xác thực mạng
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          # Cấu hình bảo mật RDP
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force
-          # Mở port 3389 firewall
+          # Mở port 3389
           netsh advfirewall firewall add rule name="RDP-Premium" dir=in action=allow protocol=TCP localport=3389 profile=any
           netsh advfirewall firewall add rule name="RDP-Premium-Out" dir=out action=allow protocol=TCP localport=3389 profile=any
-          # Khởi động dịch vụ TermService
+          # Khởi động dịch vụ
           Set-Service -Name TermService -StartupType Automatic -ErrorAction SilentlyContinue
+          Set-Service -Name UmRdpService -StartupType Automatic -ErrorAction SilentlyContinue
           Start-Service -Name TermService -ErrorAction SilentlyContinue
-          # Tắt tất cả antivirus/firewall/app & browser
-          Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-          Get-Service | Where-Object {$_.DisplayName -match "Windows Defender"} | Stop-Service -Force -ErrorAction SilentlyContinue
-          Write-Host "✅ Cấu hình hệ thống hoàn tất!" -ForegroundColor Green
+          Start-Service -Name UmRdpService -ErrorAction SilentlyContinue
 
-      # 3️⃣ TẠO USER PREMIUM
       - name: 👤 TẠO TÀI KHOẢN PREMIUM
         run: |
           Write-Host "👤 ĐANG TẠO TÀI KHOẢN PREMIUM" -ForegroundColor Yellow
           $matKhau = "AnhKhoa@123"
           $securePass = ConvertTo-SecureString $matKhau -AsPlainText -Force
-          Remove-LocalUser -Name "AISTV-PREMIUM" -ErrorAction SilentlyContinue
+          try { Remove-LocalUser -Name "AISTV-PREMIUM" -ErrorAction SilentlyContinue } catch {}
           New-LocalUser -Name "AISTV-PREMIUM" -Password $securePass -AccountNeverExpires -Description "AI STV Premium Account"
           Set-LocalUser -Name "AISTV-PREMIUM" -PasswordNeverExpires $true -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Administrators" -Member "AISTV-PREMIUM" -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "AISTV-PREMIUM" -ErrorAction SilentlyContinue
+          Add-LocalGroupMember -Group "Users" -Member "AISTV-PREMIUM" -ErrorAction SilentlyContinue
           Enable-LocalUser -Name "AISTV-PREMIUM"
-          Write-Host "✅ Tài khoản AISTV-PREMIUM đã sẵn sàng với mật khẩu: $matKhau" -ForegroundColor Green
+          echo "RDP_USER=AISTV-PREMIUM" >> $env:GITHUB_ENV
+          echo "RDP_PASS=$matKhau" >> $env:GITHUB_ENV
+          Write-Host "✅ Tài khoản: AISTV-PREMIUM đã sẵn sàng" -ForegroundColor Green
 
-      # 4️⃣ CÀI WINRAR NGAY SAU KHI TẠO USER
-      - name: 🗜️ CÀI WINRAR
+      - name: 🗜️ CÀI WINRAR VÀ TẢI FILE
         run: |
-          Write-Host "🔄 Kiểm tra và cài đặt WinRAR..." -ForegroundColor Yellow
+          Write-Host "🔄 Cài đặt WinRAR nếu chưa có..." -ForegroundColor Yellow
           $winrarPath = "$env:ProgramFiles\WinRAR\WinRAR.exe"
           if (-Not (Test-Path $winrarPath)) {
             $installer = "$env:TEMP\winrar-x64.exe"
             try {
               Invoke-WebRequest -Uri "https://www.win-rar.com/fileadmin/winrar-versions/winrar/winrar-x64-713.exe" -OutFile $installer
               Start-Process -FilePath $installer -ArgumentList "/S" -Wait
-              Write-Host "✅ WinRAR đã được cài đặt thành công" -ForegroundColor Green
+              Write-Host "✅ WinRAR đã cài xong" -ForegroundColor Green
             } catch {
               Write-Host "⚠️ Không thể cài WinRAR, bỏ qua" -ForegroundColor Yellow
             } finally {
               Remove-Item $installer -ErrorAction SilentlyContinue
             }
           } else {
-            Write-Host "✅ WinRAR đã có sẵn trên hệ thống" -ForegroundColor Green
+            Write-Host "✅ WinRAR đã có sẵn" -ForegroundColor Green
           }
 
-      # 5️⃣ KẾT NỐI TAILSCALE & LẤY IP
-      - name: 🌐 THIẾT LẬP MẠNG PREMIUM
-        env:
-          TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
-        run: |
-          Write-Host "🌐 ĐANG THIẾT LẬP MẠNG" -ForegroundColor Yellow
-          $msiPath = "$env:TEMP\tailscale-premium.msi"
-          Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $msiPath
-          Start-Process msiexec.exe -ArgumentList "/i", "`"$msiPath`"", "/quiet", "/norestart" -Wait
-          Remove-Item $msiPath -Force
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=$env:TAILSCALE_AUTH_KEY --hostname=ai-stv-premium-$env:GITHUB_RUN_ID --accept-routes --accept-dns --reset
-          $ip = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
-          echo "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
-          Write-Host "✅ IP Tailscale: $ip" -ForegroundColor Green
+          try {
+            Write-Host "🔧 Set WinRAR làm app mặc định cho .rar..." -ForegroundColor Cyan
+            Start-Process -FilePath "$winrarPath" -ArgumentList "/reg" -Wait
+            Write-Host "✅ WinRAR đã được set làm mặc định" -ForegroundColor Green
+          } catch {
+            Write-Host "⚠️ Không thể set WinRAR làm mặc định, bỏ qua" -ForegroundColor Yellow
+          }
 
-      # 6️⃣ HIỂN THỊ THÔNG TIN KẾT NỐI
-      - name: 🎉 THÔNG TIN KẾT NỐI
-        run: |
-          $matKhau = "AnhKhoa@123"
-          $ip = $env:TAILSCALE_IP
-          Write-Host "┌─────────────────────────────┐" -ForegroundColor Cyan
-          Write-Host "│ 🌐 IP: $ip" -ForegroundColor White
-          Write-Host "│ 👤 User: AISTV-PREMIUM" -ForegroundColor White
-          Write-Host "│ 🔐 Pass: $matKhau" -ForegroundColor White
-          Write-Host "└─────────────────────────────┘" -ForegroundColor Cyan
+          try {
+            $downloads = [Environment]::GetFolderPath("UserProfile") + "\Downloads"
+            $fileUrl = "https://drive.usercontent.google.com/download?id=1XKZzk-0fyGLyeuDDoUHL54AiK-ryUZmV&export=download&authuser=0"
+            $output = "$downloads\downloaded_file"
+            Invoke-WebRequest -Uri $fileUrl -OutFile $output -ErrorAction Stop
+            Write-Host "✅ File đã được tải về: $output" -ForegroundColor Green
+          } catch {
+            Write-Host "⚠️ Không thể tải file từ Google Drive, bỏ qua" -ForegroundColor Yellow
+          }
 
-      # 7️⃣ DUY TRÌ PHIÊN LÀM VIỆC
       - name: ⏳ DUY TRÌ PHIÊN LÀM VIỆC
         run: |
-          $duration = "${{ github.event.inputs.duration }}"
-          $minutes = switch ($duration) { "1h" {60} "3h" {180} "5h40m" {340} }
-          $endTime = (Get-Date).AddMinutes($minutes)
-          Write-Host "🔄 Bắt đầu duy trì phiên làm việc..." -ForegroundColor Yellow
-          while ((Get-Date) -lt $endTime) {
+          Write-Host "🔄 BẮT ĐẦU DUY TRÌ PHIÊN LÀM VIỆC..." -ForegroundColor Yellow
+          # Giữ kết nối RDP, kiểm tra dịch vụ TermService
+          $lastLogTime = Get-Date
+          while ($true) {
+            $termService = Get-Service -Name TermService -ErrorAction SilentlyContinue
+            if ($termService.Status -ne 'Running') { Start-Service -Name TermService -ErrorAction SilentlyContinue }
             Start-Sleep -Seconds 30
           }
-          Write-Host "🎯 Đã hết thời gian!" -ForegroundColor Red
 
-      # 8️⃣ DỌN DẸP HỆ THỐNG
       - name: 🧹 DỌN DẸP HỆ THỐNG
         if: always()
         run: |
-          Write-Host "🧹 Dọn dẹp hệ thống..." -ForegroundColor Yellow
+          Write-Host "🧹 ĐANG DỌN DẸP HỆ THỐNG..." -ForegroundColor Yellow
+          Remove-Item "$env:TEMP\rdp_password.txt" -ErrorAction SilentlyContinue
           Disable-LocalUser -Name "AISTV-PREMIUM" -ErrorAction SilentlyContinue
+          try { & "$env:ProgramFiles\Tailscale\tailscale.exe" down --accept-risk=all } catch {}
           netsh advfirewall firewall delete rule name="RDP-Premium" dir=in -ErrorAction SilentlyContinue
           netsh advfirewall firewall delete rule name="RDP-Premium-Out" dir=out -ErrorAction SilentlyContinue
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" down --accept-risk=all -ErrorAction SilentlyContinue
-          Write-Host "🎉 Dọn dẹp hoàn tất!" -ForegroundColor Green
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 1 -Force
+          Stop-Service -Name TermService -Force -ErrorAction SilentlyContinue
